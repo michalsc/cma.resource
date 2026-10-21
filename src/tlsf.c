@@ -28,6 +28,20 @@ static inline __attribute__((always_inline)) int MS(uintptr_t i)
         return 63 - __builtin_clzl(i);
 }
 
+/*
+    Normalise a requested alignment: at least SIZE_ALIGN, at most MAX_ALIGNMENT,
+    and rounded up to the next power of two - the requested alignment was given
+    for a reason. MAX_ALIGNMENT is a power of two, so rounding up after the clamp
+    never exceeds it.
+*/
+static inline __attribute__((always_inline)) uintptr_t NORMALISE_ALIGN(uintptr_t align)
+{
+    if (align < SIZE_ALIGN) align = SIZE_ALIGN;
+    if (align > MAX_ALIGNMENT) align = MAX_ALIGNMENT;
+    if (align & (align - 1)) align = 2UL << MS(align);
+    return align;
+}
+
 static inline __attribute__((always_inline)) void SET_BIT(int nr, uint32_t *ptr)
 {
     ptr[nr >> 5] |= (1 << (nr & 31));
@@ -294,6 +308,8 @@ void * tlsf_malloc(void *t, uintptr_t size)
 
     if (unlikely(!tlsf || !size)) return NULL;
 
+    if (unlikely(size > tlsf->total_size)) return NULL;
+
     if (tlsf->flags & TLSF_MULTITHREADING)
     {
         b = tlsf_intern_malloc(tlsf, size);
@@ -379,14 +395,9 @@ void * tlsf_malloc_aligned(void *t, uintptr_t size, uintptr_t align)
     
     if (unlikely(!tlsf || !size)) return NULL;
 
-    if (align < SIZE_ALIGN) align = SIZE_ALIGN;
-    if (align > MAX_ALIGNMENT) align = MAX_ALIGNMENT;
+    if (unlikely(size > tlsf->total_size)) return NULL;
 
-    /* Round alignment up - the requested alignment was given for a reason */
-    align = ROUNDUP(align);
-
-    /* Adjust align to the top nearest power of two */
-    align = 1 << MS(align);
+    align = NORMALISE_ALIGN(align);
 
     /* Prevent overflow in size + align */
     if (unlikely(size > (uintptr_t)-1 - align))
@@ -629,6 +640,7 @@ void *tlsf_realloc(void *t, void *ptr, uintptr_t new_size)
 
 void *tlsf_realloc_aligned(void *t, void *ptr, uintptr_t new_size, uintptr_t align)
 {
+    int force_realloc = 0;
     tlsf_t *tlsf = t;
     bhdr_t *b;
     bhdr_t *bnext;
@@ -638,6 +650,8 @@ void *tlsf_realloc_aligned(void *t, void *ptr, uintptr_t new_size, uintptr_t ali
     /* No TLSF instance? return immediately */
     if (unlikely(!tlsf))
         return NULL;
+
+    align = NORMALISE_ALIGN(align);
 
     /* NULL pointer? just allocate the memory */
     if (unlikely(!ptr))
@@ -650,19 +664,27 @@ void *tlsf_realloc_aligned(void *t, void *ptr, uintptr_t new_size, uintptr_t ali
         return NULL;
     }
 
+    /* 
+        If the buffer address does not meet the requested alignment, reallocate
+        it - move the buffer
+    */
+    if ((uintptr_t)ptr & (align - 1)) {
+        force_realloc = 1;
+    }
+
     new_size = ROUNDUP(new_size);
 
     b = MEM_TO_BHDR(ptr);
 
-    // If new size matches current size, just return same pointer
-    if (unlikely(new_size == GET_SIZE(b))) {
+    // If new size matches current size and alignment is met, just return same pointer
+    if (unlikely(force_realloc == 0 && new_size == GET_SIZE(b))) {
         return ptr;
     }
 
     bnext = GET_NEXT_BHDR(b, GET_SIZE(b));
 
     /* Shrink: only if we can create a valid free block */
-    if (new_size <= GET_SIZE(b) - ROUNDUP(sizeof(hdr_t)))
+    if (force_realloc == 0 && (new_size <= GET_SIZE(b) - ROUNDUP(sizeof(hdr_t))))
     {
         /* New header starts right after the current block b */
         bhdr_t* b1 = GET_NEXT_BHDR(b, new_size);
@@ -688,7 +710,7 @@ void *tlsf_realloc_aligned(void *t, void *ptr, uintptr_t new_size, uintptr_t ali
         return ptr;
     }
     /* Grow: try to absorb next block if free and large enough */
-    else if (FREE_BLOCK(bnext) && new_size <= GET_SIZE(b) + GET_SIZE(bnext) + ROUNDUP(sizeof(hdr_t)))
+    else if (force_realloc == 0 && (FREE_BLOCK(bnext) && new_size <= GET_SIZE(b) + GET_SIZE(bnext) + ROUNDUP(sizeof(hdr_t))))
     {
         uintptr_t total_size = GET_SIZE(b) + GET_SIZE(bnext) + ROUNDUP(sizeof(hdr_t));
         uintptr_t rest_size = total_size - new_size;

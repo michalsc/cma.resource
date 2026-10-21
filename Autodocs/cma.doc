@@ -164,8 +164,8 @@ cma.resource/CMA_ReallocMem
 	up is whole again once everything has been freed.
 
    INPUTS
-	buffer          a block from CMA_AllocMem(), CMA_AllocAligned() or
-	                CMA_ReallocMem() or CMA_ReallocAligned
+	buffer          a block from CMA_AllocMem(), CMA_AllocAligned(),
+	                CMA_ReallocMem() or CMA_ReallocAligned()
 
    NOTE
 	Only pass what one of the allocation calls of this resource returned,
@@ -191,16 +191,23 @@ cma.resource/CMA_ReallocMem
 	APTR CMA_ReallocAligned(APTR, ULONG, ULONG);
 
    FUNCTION
-	Grows or shrinks buffer to new_size bytes while keeping the requested
-	alignment. The data is kept up to the smaller of the old and the new 
-	size. The block may move: use the returned pointer from now on and 
-	not buffer. The alignment argument is used only of the block is moved.
+	Grows or shrinks buffer to new_size bytes, and the result starts at a
+	multiple of alignment. When buffer already has that alignment and the
+	new size fits in place, the block stays where it is. Otherwise the
+	block moves to a new address that has the alignment, even when the
+	size does not change. The data is kept up to the smaller of the old
+	and the new size. The block may move: use the returned pointer from
+	now on and not buffer.
+
+	A NULL buffer works like CMA_AllocAligned(), a new_size of 0 frees
+	buffer and returns NULL.
 
    INPUTS
-	buffer          a block from CMA_AllocMem(), CMA_AllocAligned() or
-	                CMA_ReallocMem()
+	buffer          a block from CMA_AllocMem(), CMA_AllocAligned(),
+	                CMA_ReallocMem() or CMA_ReallocAligned(), or NULL
 	new_size        the size wanted, in bytes
-	alignment       new alignment, used if block is moved
+	alignment       the block starts at a multiple of this many bytes: a
+	                power of two
 
    RESULTS
 	pointer         the block, at the same address or at a new one, or
@@ -208,13 +215,13 @@ cma.resource/CMA_ReallocMem
 
    NOTE
 	An alignment above 2 MB is taken as 2 MB, and a value that is not a
-	power of two is rounded up to one. The alignment argument is used only 
-	in case of block movement and ignored if the block is resized in place.
-	The call takes the semaphore of the resource: do not use it from an 
-	interrupt or with Forbid()/Disable() in force.
+	power of two is rounded up to one. When the block has to move and the
+	zone has no free block that large, NULL is returned and buffer is left
+	as it was. The call takes the semaphore of the resource: do not use
+	it from an interrupt or with Forbid()/Disable() in force.
 
    SEE ALSO
-	cma.resource/CMA_AllocMem(),
+	cma.resource/CMA_AllocAligned(),
 	cma.resource/CMA_FreeMem(),
 	cma.resource/CMA_ReallocMem()
 
@@ -245,7 +252,7 @@ cma.resource/CMA_ReallocMem
 
    NOTE
 	Do not assume that the block keeps the alignment it was allocated with
-	when it moves. The call takes the semaphore of the resource: do not
+	when it moves: use CMA_ReallocAligned() for that. The call takes the semaphore of the resource: do not
 	use it from an interrupt or with Forbid()/Disable() in force.
 
    SEE ALSO
