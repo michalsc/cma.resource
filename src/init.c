@@ -48,9 +48,15 @@ APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
     BOOL success = FALSE;
 
     APTR base_pointer = NULL;
-    
+
+    binding.cb_ConfigDev = NULL;
+
     ExpansionBase = (struct ExpansionBase *)OpenLibrary("expansion.library", 0);
-    GetCurrentBinding(&binding, sizeof(binding));
+
+    if (ExpansionBase != NULL)
+    {
+        GetCurrentBinding(&binding, sizeof(binding));
+    }
 
     base_pointer = AllocMem(BASE_NEG_SIZE + BASE_POS_SIZE, MEMF_PUBLIC | MEMF_CLEAR);
 
@@ -68,7 +74,7 @@ APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
 
         CMABase = (struct CMABase *)((UBYTE *)base_pointer + BASE_NEG_SIZE);
         MakeFunctions(CMABase, relFuncTable, 0);
-        
+
         CMABase->cma_Node.lib_Node.ln_Type = NT_RESOURCE;
         CMABase->cma_Node.lib_Node.ln_Pri = 120;
         CMABase->cma_Node.lib_Node.ln_Name = (STRPTR)deviceName;
@@ -93,18 +99,31 @@ APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
             if (key)
             {
                 const ULONG *reg = DT_GetPropValue(DT_FindProperty(key, "reg"));
+                ULONG base = 0;
+                ULONG size = 0;
+
+                /* reg is <base size>, two plain 32 bit words as the user writes them: not read with the cells of the
+                   parent (the root of the tree has #address-cells = 2, which would take the size for the base) */
+                if (reg != NULL)
+                {
+                    base = reg[0];
+                    size = reg[1];
+                }
 
                 DT_CloseKey(key);
-               
+
                 /* DeviceTree entry is there, see if the memory is available */
-                if (reg != NULL && reg[0] != 0 && reg[1] != 0) {
-                    tlsf_add_memory(&CMABase->cma_TLSF, (APTR)reg[0], reg[1]);
+                if (base != 0 && size != 0) {
+                    tlsf_add_memory(&CMABase->cma_TLSF, (APTR)base, size);
 
                     SumLibrary((struct Library*)CMABase);
                     AddResource(CMABase);
 
-                    binding.cb_ConfigDev->cd_Flags &= ~CDF_CONFIGME;
-                    binding.cb_ConfigDev->cd_Driver = CMABase;
+                    if (binding.cb_ConfigDev != NULL)
+                    {
+                        binding.cb_ConfigDev->cd_Flags &= ~CDF_CONFIGME;
+                        binding.cb_ConfigDev->cd_Driver = CMABase;
+                    }
 
                     success = TRUE;
                 }
@@ -114,11 +133,13 @@ APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
 
     /* If anything failed, clean up now */
     if (!success) {
-        FreeMem(base_pointer, BASE_NEG_SIZE + BASE_POS_SIZE);
+        if (base_pointer)
+            FreeMem(base_pointer, BASE_NEG_SIZE + BASE_POS_SIZE);
         CMABase = NULL;
     }
 
-    CloseLibrary((struct Library*)ExpansionBase);
+    if (ExpansionBase != NULL)
+        CloseLibrary((struct Library*)ExpansionBase);
 
     return CMABase;
 }
