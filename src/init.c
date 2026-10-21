@@ -8,37 +8,12 @@
 #include <libraries/configregs.h>
 #include <libraries/configvars.h>
 
-#include <common/compiler.h>
-
+#include "compiler.h"
 #include "cma.h"
 
 extern UBYTE rom_end;
 extern const char deviceName[];
 extern const char deviceIdString[];
-
-/*
-    Some properties, like e.g. #size-cells, are not always available in a key, but in that case the properties
-    should be searched for in the parent. The process repeats recursively until either root key is found
-    or the property is found, whichever occurs first
-*/
-CONST_APTR GetPropValueRecursive(APTR key, CONST_STRPTR property, APTR DeviceTreeBase)
-{
-    do {
-        /* Find the property first */
-        APTR prop = DT_FindProperty(key, property);
-
-        if (prop)
-        {
-            /* If property is found, get its value and exit */
-            return DT_GetPropValue(prop);
-        }
-        
-        /* Property was not found, go to the parent and repeat */
-        key = DT_GetParent(key);
-    } while (key);
-
-    return NULL;
-}
 
 APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
 {
@@ -70,7 +45,7 @@ APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
         MakeFunctions(CMABase, relFuncTable, 0);
         
         CMABase->cma_Node.lib_Node.ln_Type = NT_RESOURCE;
-        CMABase->cma_Node.lib_Node.ln_Pri = 120;
+        CMABase->cma_Node.lib_Node.ln_Pri = CMA_PRIORITY;
         CMABase->cma_Node.lib_Node.ln_Name = (STRPTR)deviceName;
 
         CMABase->cma_Node.lib_NegSize = BASE_NEG_SIZE;

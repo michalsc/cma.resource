@@ -16,9 +16,8 @@
 #include <proto/exec.h>
 #include <stdint.h>
 
-#include <common/compiler.h>
-
 #include "cma.h"
+#include "compiler.h"
 
 int dont_execute() { return -1; }
 

@@ -4,7 +4,6 @@
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <exec/semaphores.h>
-#include <common/compiler.h>
 
 #include "compiler.h"
 #include "tlsf.h"
