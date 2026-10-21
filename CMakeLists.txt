@@ -25,7 +25,7 @@ bin_to_header(cma.resource)
 target_compile_options(cma.resource PRIVATE -Os -m68040 -msmall-code -fomit-frame-pointer)
 target_compile_definitions(cma.resource PRIVATE VERSION_STRING="${VERSTRING}")
 target_include_directories(cma.resource PRIVATE include)
-target_link_options(cma.resource PRIVATE -ffreestanding -nostdlib -nostartfiles -Wl,-e_code_start -Wl,-T${CMAKE_CURRENT_SOURCE_DIR}/ldscript.lds)
+target_link_options(cma.resource PRIVATE -ffreestanding -nostdlib -s -nostartfiles -Wl,-e_code_start -Wl,-T${CMAKE_CURRENT_SOURCE_DIR}/ldscript.lds)
 target_link_libraries(cma.resource devicetree)
 
 set_target_properties(cma.resource PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ldscript.lds)
