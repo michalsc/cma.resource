@@ -20,7 +20,7 @@ struct CMABase {
 };
 
 #define NUMBER_OF_FUNCTIONS 5
-#define BASE_NEG_SIZE (NUMBER_OF_FUNCTIONS * 6)
+#define BASE_NEG_SIZE (((NUMBER_OF_FUNCTIONS * 6) + 3) & ~3)
 #define BASE_POS_SIZE ((sizeof(struct CMABase)))
 
 APTR  L_AllocMem(REGARG(ULONG byte_size, "d0"), REGARG(struct CMABase *CMABase, "a6"));

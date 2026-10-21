@@ -1,0 +1,213 @@
+TABLE OF CONTENTS
+
+cma.resource/--background--
+cma.resource/CMA_AllocAligned
+cma.resource/CMA_AllocMem
+cma.resource/CMA_Avail
+cma.resource/CMA_FreeMem
+cma.resource/CMA_ReallocMem
+cma.resource/--background--                       cma.resource/--background--
+
+   CMA
+	cma.resource manages one zone of uncached, physically contiguous
+	memory that is set aside for the use of DMA engines and of the
+	VideoCore. The zone is reserved by the Emu68 firmware (the "cma"
+	device tree overlay, for example dtoverlay=cma,size=8 in user.txt,
+	size in megabytes) and announced as the property reg = <base size> of
+	the node /emu68/cma@0 of the device tree. When the node is absent or
+	empty the resource does not load.
+
+	The zone is not part of the memory lists of exec.library: AllocMem()
+	never hands it out. Programs take memory from it with the calls of
+	this resource. A block is contiguous, lies inside the zone and is
+	never cached by the CPU, so the data written by a program or by a DMA
+	engine is seen by the other side without cache maintenance.
+
+	Open the resource with OpenResource("cma.resource"), a resource has no
+	OpenLibrary() and no CloseLibrary(), and fail cleanly when it is not
+	there: it exists only on a system that was configured with the
+	overlay.
+
+	The allocator is TLSF. Sizes are rounded up to a multiple of 16 bytes,
+	and every block costs a header taken from the zone, so CMA_Avail()
+	starts a little under the size of the zone (64 bytes under it on the
+	first version) and a request of almost the whole free size is refused.
+	The calls take a semaphore: do not use them from an interrupt or under
+	Forbid()/Disable().
+
+	Reading the zone is slower than reading cached memory (measured on a
+	PiStorm: about 11 times slower than FAST RAM), writing is not. Keep in
+	it what the hardware needs to share, and copy the rest to normal
+	memory.
+
+   VERSIONS
+	The number is the version of the resource: lib_Version.lib_Revision. A
+	call that was added after the first version has its version at the end
+	of its NAME line, like "(V1.5)". A change in what a call does is
+	written in its FUNCTION text, "As of V1.5 ..." and "Prior to V1.5
+	...". A call without a version in its NAME has been there since 1.0.
+
+	1.0 20.10.2026 First version: CMA_AllocMem(), CMA_AllocAligned(),
+	                 CMA_ReallocMem(), CMA_FreeMem() and CMA_Avail().
+
+cma.resource/CMA_AllocAligned                   cma.resource/CMA_AllocAligned
+
+   NAME
+	CMA_AllocAligned -- allocate an aligned block of uncached memory
+
+   SYNOPSIS
+	aligned = CMA_AllocAligned( byte_size, alignment )
+	d0                          d0         d1
+
+	APTR CMA_AllocAligned(ULONG, ULONG);
+
+   FUNCTION
+	Like CMA_AllocMem(), but the address of the block is a multiple of
+	alignment. Use it for what a DMA engine or the VideoCore wants at a
+	given boundary, such as 16, 64 or 4096 bytes.
+
+   INPUTS
+	byte_size       size of the block in bytes
+	alignment       the block starts at a multiple of this many bytes: a
+	                power of two
+
+   RESULTS
+	aligned         the block, or NULL when the zone has no free block
+	                that large
+
+   NOTE
+	An alignment above 2 MB is taken as 2 MB, and a value that is not a
+	power of two is rounded down to one. The call takes the semaphore of
+	the resource: do not use it from an interrupt or with
+	Forbid()/Disable() in force. Release the block with CMA_FreeMem().
+
+   SEE ALSO
+	cma.resource/CMA_AllocMem(),
+	cma.resource/CMA_FreeMem()
+
+cma.resource/CMA_AllocMem                           cma.resource/CMA_AllocMem
+
+   NAME
+	CMA_AllocMem -- allocate a block of uncached contiguous memory
+
+   SYNOPSIS
+	mem = CMA_AllocMem( byte_size )
+	d0                  d0
+
+	APTR CMA_AllocMem(ULONG);
+
+   FUNCTION
+	Takes a block of byte_size bytes from the zone. The size is rounded up
+	to a multiple of 16 bytes. The block lies entirely in the zone, in one
+	piece, and its contents are not defined: the call does not clear it.
+
+   INPUTS
+	byte_size       size of the block in bytes
+
+   RESULTS
+	mem             the block, or NULL when the zone has no free block
+	                that large, or when byte_size is 0
+
+   NOTE
+	The call takes the semaphore of the resource: it can wait, so do not
+	use it from an interrupt or with Forbid()/Disable() in force. Release
+	the block with CMA_FreeMem().
+
+   SEE ALSO
+	cma.resource/CMA_AllocAligned(),
+	cma.resource/CMA_FreeMem(),
+	cma.resource/CMA_Avail()
+
+cma.resource/CMA_Avail                                 cma.resource/CMA_Avail
+
+   NAME
+	CMA_Avail -- free memory left in the zone
+
+   SYNOPSIS
+	bytes = CMA_Avail()
+	d0
+
+	ULONG CMA_Avail(void);
+
+   FUNCTION
+	Returns how many bytes of the zone are free, the sum of all free
+	blocks.
+
+   RESULTS
+	bytes           free bytes in the zone
+
+   NOTE
+	The free memory may be split into several blocks: the largest block
+	that can be allocated is smaller than this value, and a request for
+	almost all of it is refused. A new zone reports 64 bytes less than its
+	size.
+
+   SEE ALSO
+	cma.resource/CMA_AllocMem()
+
+cma.resource/CMA_FreeMem                             cma.resource/CMA_FreeMem
+
+   NAME
+	CMA_FreeMem -- return a block to the zone
+
+   SYNOPSIS
+	CMA_FreeMem( buffer )
+	             a0
+
+	VOID CMA_FreeMem(APTR);
+
+   FUNCTION
+	Gives the block back to the zone. The size is known to the allocator,
+	it is not passed. Free neighbours are joined, so a zone that was used
+	up is whole again once everything has been freed.
+
+   INPUTS
+	buffer          a block from CMA_AllocMem(), CMA_AllocAligned() or
+	                CMA_ReallocMem()
+
+   NOTE
+	Only pass what one of the allocation calls of this resource returned,
+	never memory of exec.library, and free a block once. The call takes
+	the semaphore of the resource: do not use it from an interrupt or with
+	Forbid()/Disable() in force.
+
+   SEE ALSO
+	cma.resource/CMA_AllocMem(),
+	cma.resource/CMA_AllocAligned(),
+	cma.resource/CMA_ReallocMem()
+
+cma.resource/CMA_ReallocMem                       cma.resource/CMA_ReallocMem
+
+   NAME
+	CMA_ReallocMem -- change the size of a block
+
+   SYNOPSIS
+	pointer = CMA_ReallocMem( buffer, new_size )
+	d0                        a0      d0
+
+	APTR CMA_ReallocMem(APTR, ULONG);
+
+   FUNCTION
+	Grows or shrinks buffer to new_size bytes. The data is kept up to the
+	smaller of the old and the new size. The block may move: use the
+	returned pointer from now on and not buffer.
+
+   INPUTS
+	buffer          a block from CMA_AllocMem(), CMA_AllocAligned() or
+	                CMA_ReallocMem()
+	new_size        the size wanted, in bytes
+
+   RESULTS
+	pointer         the block, at the same address or at a new one, or
+	                NULL when it could not be resized
+
+   NOTE
+	Do not assume that the block keeps the alignment it was allocated with
+	when it moves. The call takes the semaphore of the resource: do not
+	use it from an interrupt or with Forbid()/Disable() in force.
+
+   SEE ALSO
+	cma.resource/CMA_AllocMem(),
+	cma.resource/CMA_FreeMem()
+
+

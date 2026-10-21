@@ -1,13 +1,14 @@
 cmake_minimum_required(VERSION 3.14.0)
 project(cma VERSION 1.0.0)
 
-include(cmake/bin2h.cmake)
-include(cmake/verstring.cmake)
-include(cmake/sfdc.cmake)
-
 if(NOT TARGET devicetree)
     add_subdirectory(devicetree.resource EXCLUDE_FROM_ALL)
 endif()
+
+# What is ours comes after the project above: it defines a get_verstring() and an sfdc() of its own, and the last definition is the one that stays
+include(cmake/bin2h.cmake)
+include(cmake/verstring.cmake)
+include(cmake/sfdc.cmake)
 
 get_verstring(VERSTRING)
 sfdc(sfd/cma_lib.sfd)
@@ -32,4 +33,7 @@ set_target_properties(cma.resource PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURC
 
 # no install for devicetree.resource itself, it goes to ROM
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/sfd DESTINATION Developer)
-install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/includes/ DESTINATION Developer/include)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Autodocs DESTINATION Developer)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/resources DESTINATION Developer/include)
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/FD DESTINATION Developer)
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/ DESTINATION Developer/include)
