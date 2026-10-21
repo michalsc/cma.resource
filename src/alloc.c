@@ -38,6 +38,18 @@ APTR  L_ReallocMem(REGARG(APTR buffer, "a0"), REGARG(ULONG new_size, "d0"), REGA
     return result;
 }
 
+APTR  L_ReallocAligned(REGARG(APTR buffer, "a0"), REGARG(ULONG new_size, "d0"), REGARG(ULONG align, "d1"), REGARG(struct CMABase *CMABase, "a6"))
+{
+    struct ExecBase *SysBase = *(struct ExecBase**)4UL;
+    APTR result = NULL;
+
+    ObtainSemaphore(&CMABase->cma_Lock);
+    result = tlsf_realloc_aligned(&CMABase->cma_TLSF, buffer, new_size, align);
+    ReleaseSemaphore(&CMABase->cma_Lock);
+
+    return result;
+}
+
 VOID  L_FreeMem(REGARG(APTR buffer, "a0"), REGARG(struct CMABase *CMABase, "a6"))
 {
     struct ExecBase *SysBase = *(struct ExecBase**)4UL;

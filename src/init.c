@@ -1,4 +1,6 @@
 
+#include <common/compiler.h>
+
 #include <exec/types.h>
 #include <exec/execbase.h>
 #include <proto/exec.h>
@@ -8,7 +10,6 @@
 #include <libraries/configregs.h>
 #include <libraries/configvars.h>
 
-#include "compiler.h"
 #include "cma.h"
 
 extern UBYTE rom_end;
@@ -42,8 +43,9 @@ APTR Init(REGARG(struct ExecBase *SysBase, "a6"))
         relFuncTable[0] = (ULONG)&L_AllocMem;
         relFuncTable[1] = (ULONG)&L_AllocAligned;
         relFuncTable[2] = (ULONG)&L_ReallocMem;
-        relFuncTable[3] = (ULONG)&L_FreeMem;
-        relFuncTable[4] = (ULONG)&L_Avail;
+        relFuncTable[3] = (ULONG)&L_ReallocAligned;
+        relFuncTable[4] = (ULONG)&L_FreeMem;
+        relFuncTable[5] = (ULONG)&L_Avail;
 
         relFuncTable[NUMBER_OF_FUNCTIONS] = (ULONG)-1;
 

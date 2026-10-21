@@ -7,6 +7,8 @@
     with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
+#include <common/compiler.h>
+
 #include <exec/types.h>
 #include <exec/resident.h>
 #include <exec/errors.h>
@@ -17,7 +19,6 @@
 #include <stdint.h>
 
 #include "cma.h"
-#include "compiler.h"
 
 int dont_execute() { return -1; }
 

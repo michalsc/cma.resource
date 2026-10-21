@@ -12,7 +12,6 @@
 
 #undef USE_MACROS
 
-
 static inline __attribute__((always_inline)) int LS(uintptr_t i)
 {
     if (sizeof(uintptr_t) == 4)
@@ -383,6 +382,9 @@ void * tlsf_malloc_aligned(void *t, uintptr_t size, uintptr_t align)
     if (align < SIZE_ALIGN) align = SIZE_ALIGN;
     if (align > MAX_ALIGNMENT) align = MAX_ALIGNMENT;
 
+    /* Round alignment up - the requested alignment was given for a reason */
+    align = ROUNDUP(align);
+
     /* Adjust align to the top nearest power of two */
     align = 1 << MS(align);
 
@@ -614,6 +616,122 @@ void *tlsf_realloc(void *t, void *ptr, uintptr_t new_size)
         uintptr_t old_size = GET_SIZE(b);
 
         void * p = tlsf_malloc(tlsf, new_size);
+        if (!p)
+            return NULL;
+        
+        uintptr_t copy_size = old_size < new_size ? old_size : new_size;
+        CopyMem(ptr, p, copy_size);
+        tlsf_free(tlsf, ptr);
+        return p;
+    }
+}
+
+
+void *tlsf_realloc_aligned(void *t, void *ptr, uintptr_t new_size, uintptr_t align)
+{
+    tlsf_t *tlsf = t;
+    bhdr_t *b;
+    bhdr_t *bnext;
+    int fl;
+    int sl;
+
+    /* No TLSF instance? return immediately */
+    if (unlikely(!tlsf))
+        return NULL;
+
+    /* NULL pointer? just allocate the memory */
+    if (unlikely(!ptr))
+        return tlsf_malloc_aligned(tlsf, new_size, align);
+
+    /* size = 0? free memory */
+    if (unlikely(!new_size))
+    {
+        tlsf_free(tlsf, ptr);
+        return NULL;
+    }
+
+    new_size = ROUNDUP(new_size);
+
+    b = MEM_TO_BHDR(ptr);
+
+    // If new size matches current size, just return same pointer
+    if (unlikely(new_size == GET_SIZE(b))) {
+        return ptr;
+    }
+
+    bnext = GET_NEXT_BHDR(b, GET_SIZE(b));
+
+    /* Shrink: only if we can create a valid free block */
+    if (new_size <= GET_SIZE(b) - ROUNDUP(sizeof(hdr_t)))
+    {
+        /* New header starts right after the current block b */
+        bhdr_t* b1 = GET_NEXT_BHDR(b, new_size);
+
+        /* Update pointer and size */
+        b1->header.prev = b;
+        SET_SIZE_AND_FLAGS(b1, GET_SIZE(b) - new_size - ROUNDUP(sizeof(hdr_t)), THIS_FREE | PREV_BUSY);
+
+        /* Current block gets smaller */
+        SET_SIZE(b, new_size);
+
+        /* Try to merge with next block */
+        b1 = MERGE_NEXT(tlsf, b1);
+
+        /* Tell next block that previous one is free. Also update the prev link in case it changed */
+        bnext = GET_NEXT_BHDR(b1, GET_SIZE(b1));
+        SET_FREE_PREV_BLOCK(bnext);
+        bnext->header.prev = b1;
+
+        /* Insert free block into the proper list */
+        INSERT_FREE_BLOCK(tlsf, b1);
+
+        return ptr;
+    }
+    /* Grow: try to absorb next block if free and large enough */
+    else if (FREE_BLOCK(bnext) && new_size <= GET_SIZE(b) + GET_SIZE(bnext) + ROUNDUP(sizeof(hdr_t)))
+    {
+        uintptr_t total_size = GET_SIZE(b) + GET_SIZE(bnext) + ROUNDUP(sizeof(hdr_t));
+        uintptr_t rest_size = total_size - new_size;
+
+        MAPPING_INSERT(GET_SIZE(bnext), &fl, &sl);
+
+        REMOVE_HEADER(tlsf, bnext, fl, sl);
+
+        if (rest_size >= ROUNDUP(sizeof(hdr_t)))
+        {
+            /* Split: allocated block + new free block */
+            SET_SIZE(b, new_size);
+
+            bhdr_t *b1 = GET_NEXT_BHDR(b, new_size);
+            b1->header.prev = b;
+            SET_SIZE_AND_FLAGS(b1, rest_size - ROUNDUP(sizeof(hdr_t)), THIS_FREE | PREV_BUSY);
+
+            bnext = GET_NEXT_BHDR(b1, GET_SIZE(b1));
+            bnext->header.prev = b1;
+            SET_FREE_PREV_BLOCK(bnext);
+
+            INSERT_FREE_BLOCK(tlsf, b1);
+        }
+        else
+        {
+            /* Keep all space in allocated block */
+            SET_SIZE(b, total_size);
+
+            bnext = GET_NEXT_BHDR(b, GET_SIZE(b));
+            bnext->header.prev = b;
+            SET_BUSY_PREV_BLOCK(bnext);
+        }
+
+        return ptr;
+    }
+    /* Can't grow in place: allocate new block */
+    else
+    {
+        struct ExecBase *SysBase = *(struct ExecBase**)4UL;
+
+        uintptr_t old_size = GET_SIZE(b);
+
+        void * p = tlsf_malloc_aligned(tlsf, new_size, align);
         if (!p)
             return NULL;
         

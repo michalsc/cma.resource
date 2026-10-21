@@ -9,6 +9,7 @@
 APTR CMA_AllocMem(ULONG byte_size) (D0)
 APTR CMA_AllocAligned(ULONG byte_size, ULONG alignment) (D0,D1)
 APTR CMA_ReallocMem(APTR buffer, ULONG new_size) (A0,D0)
+APTR CMA_ReallocAligned(APTR buffer, ULONG new_size, ULONG alignment) (A0,D0,D1)
 VOID CMA_FreeMem(APTR buffer) (A0)
 ULONG CMA_Avail() ()
 ==end
